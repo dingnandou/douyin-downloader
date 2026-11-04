@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0f">
+<title>抖音下载</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #0b0b0f;
+    --card: #16161d;
+    --line: #26262f;
+    --text: #f2f2f5;
+    --muted: #8b8b98;
+    --red: #fe2c55;
+    --cyan: #25f4ee;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: radial-gradient(1200px 600px at 50% -10%, #1a1a24 0%, var(--bg) 55%);
+    color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: calc(env(safe-area-inset-top) + 28px) 18px calc(env(safe-area-inset-bottom) + 28px);
+  }
+  main { max-width: 520px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .logo {
+    width: 34px; height: 34px; border-radius: 10px; flex: none;
+    background: linear-gradient(135deg, var(--cyan), var(--red));
+    display: grid; place-items: center;
+    box-shadow: 0 6px 18px rgba(254, 44, 85, .35);
+  }
+  .logo svg { width: 19px; height: 19px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 4px 0 20px; }
+  textarea {
+    width: 100%; min-height: 96px; resize: vertical;
+    background: var(--card); color: var(--text);
+    border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px; font: inherit; line-height: 1.5;
+    outline: none; transition: border-color .15s;
+  }
+  textarea:focus { border-color: #3a3a48; }
+  textarea::placeholder { color: #5a5a68; }
+  button.primary {
+    width: 100%; margin-top: 12px; padding: 14px;
+    border: 0; border-radius: 14px; cursor: pointer;
+    font: 600 16px/1 inherit; color: #fff;
+    background: linear-gradient(135deg, var(--red), #ff5c7c);
+    box-shadow: 0 8px 22px rgba(254, 44, 85, .28);
+    transition: transform .08s, opacity .15s;
+  }
+  button.primary:active { transform: scale(.985); }
+  button.primary:disabled { opacity: .55; cursor: default; }
+  .status { min-height: 20px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .status.error { color: #ff7b8a; }
+  .card {
+    margin-top: 18px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+  }
+  .cover { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; background: #101016; }
+  .meta { padding: 14px 16px 16px; }
+  .title { font-size: 15px; font-weight: 600; margin: 0 0 6px; word-break: break-word; }
+  .author { font-size: 13px; color: var(--muted); }
+  .download {
+    display: block; text-align: center; text-decoration: none;
+    margin-top: 14px; padding: 14px; border-radius: 12px;
+    font-weight: 600; color: #0b0b0f; border: 0; width: 100%;
+    font-family: inherit; font-size: 15px; cursor: pointer;
+    background: linear-gradient(135deg, var(--cyan), #7ff8f3);
+  }
+  .download:disabled { opacity: .6; cursor: default; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
+  .thumb {
+    position: relative; display: block; border-radius: 12px;
+    overflow: hidden; background: #101016; text-decoration: none;
+  }
+  .thumb img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; }
+  .thumb span {
+    position: absolute; left: 8px; bottom: 8px;
+    padding: 4px 10px; border-radius: 999px;
+    background: rgba(11, 11, 15, .72); backdrop-filter: blur(6px);
+    font-size: 12px; color: #fff; font-weight: 600;
+  }
+  footer { max-width: 520px; margin: 26px auto 0; text-align: center; font-size: 12px; color: #55555f; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <span class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#0b0b0f" stroke-width="2.4"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>
+      </svg>
+    </span>
+    <h1>抖音下载</h1>
+  </div>
+  <p class="sub">粘贴抖音分享内容，解析并保存视频或图文</p>
+
+  <textarea id="input" placeholder="在抖音点「分享 → 复制链接」，粘贴到这里。&#10;例如：8.20 复制打开抖音，看看【某某】的作品 https://v.douyin.com/xxxxxx/"></textarea>
+  <button id="parse" class="primary">解析作品</button>
+  <div id="status" class="status" role="status" aria-live="polite"></div>
+
+  <section id="result" class="card" hidden>
+    <img id="cover" class="cover" alt="作品封面" hidden>
+    <div class="meta">
+      <p id="title" class="title"></p>
+      <div id="author" class="author"></div>
+      <a id="download" class="download" hidden download>保存视频</a>
+      <button id="bundle" class="download" type="button" hidden>打包下载全部图片</button>
+      <div id="grid" class="grid"></div>
+    </div>
+  </section>
+</main>
+<footer>仅供个人学习与存档，请尊重作者版权，勿二次分发</footer>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const input = $('#input');
+const btn = $('#parse');
+const statusEl = $('#status');
+const result = $('#result');
+const coverEl = $('#cover');
+const titleEl = $('#title');
+const authorEl = $('#author');
+const dlEl = $('#download');
+const bundleBtn = $('#bundle');
+const gridEl = $('#grid');
+
+let current = null;
+
+function setStatus(text, kind) {
+  statusEl.textContent = text || '';
+  statusEl.className = 'status' + (kind ? ' ' + kind : '');
+}
+
+function formatDuration(sec) {
+  if (!sec) return '';
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function render(data) {
+  current = data;
+  const isVideo = data.type === 'video';
+
+  titleEl.textContent = data.title || (isVideo ? '抖音视频' : '抖音图文');
+  const parts = [];
+  if (data.author) parts.push('@' + data.author);
+  if (isVideo && data.duration) parts.push(formatDuration(data.duration));
+  if (!isVideo && data.images) parts.push(data.images.length + ' 张图片');
+  authorEl.textContent = parts.join(' · ');
+
+  coverEl.hidden = !isVideo || !data.cover;
+  if (isVideo && data.cover) coverEl.src = data.cover;
+
+  dlEl.hidden = !isVideo;
+  bundleBtn.hidden = isVideo;
+  gridEl.innerHTML = '';
+
+  if (isVideo) {
+    dlEl.href = `/api/download?u=${encodeURIComponent(data.video_url)}&name=${encodeURIComponent(data.title || 'douyin')}`;
+  } else {
+    (data.images || []).forEach((imgUrl, i) => {
+      const a = document.createElement('a');
+      a.className = 'thumb';
+      a.download = '';
+      a.href = `/api/image?u=${encodeURIComponent(imgUrl)}&name=${encodeURIComponent((data.title || 'douyin') + '_' + (i + 1))}`;
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.src = imgUrl;
+      img.alt = `图 ${i + 1}`;
+      const badge = document.createElement('span');
+      badge.textContent = '保存';
+      a.append(img, badge);
+      gridEl.appendChild(a);
+    });
+  }
+
+  result.hidden = false;
+}
+
+async function parse() {
+  const text = input.value.trim();
+  if (!text) {
+    setStatus('请先粘贴抖音分享内容', 'error');
+    input.focus();
+    return;
+  }
+  btn.disabled = true;
+  result.hidden = true;
+  setStatus('解析中，请稍候…');
+  try {
+    const res = await fetch('/api/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || '解析失败，请换一个链接试试');
+    render(data);
+    setStatus('');
+  } catch (e) {
+    setStatus(e.message || '网络错误', 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function bundle() {
+  if (!current || !current.images || !current.images.length) return;
+  const original = bundleBtn.textContent;
+  bundleBtn.disabled = true;
+  bundleBtn.textContent = '打包中…';
+  try {
+    const res = await fetch('/api/bundle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images: current.images, title: current.title || 'douyin' }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || '打包失败');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (current.title || '抖音图片') + '_图片.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (e) {
+    setStatus(e.message || '打包失败', 'error');
+  } finally {
+    bundleBtn.disabled = false;
+    bundleBtn.textContent = original;
+  }
+}
+
+btn.addEventListener('click', parse);
+bundleBtn.addEventListener('click', bundle);
+input.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') parse();
+});
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

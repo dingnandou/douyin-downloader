@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.log
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/keystore.jks
+android/.idea/
+android/*.iml
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.claude/
+.DS_Store
+Thumbs.db
