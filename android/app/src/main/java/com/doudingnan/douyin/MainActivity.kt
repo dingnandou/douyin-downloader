@@ -33,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var current: MediaItem? = null
     private var parsingId: String? = null
+    private val logs = StringBuilder()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,14 +80,67 @@ class MainActivity : AppCompatActivity() {
                 request: WebResourceRequest?,
             ): WebResourceResponse? {
                 val url = request?.url?.toString() ?: return null
-                if (!url.contains("aweme/v1/web/aweme/detail")) return null
-                return forwardDetail(request)
+                if (url.contains("aweme/v1/web/aweme/detail")) return forwardDetail(request)
+                if (request.isForMainFrame && url.startsWith("https://www.douyin.com/video/")) {
+                    return injectHookIntoMainPage(url)
+                }
+                return null
+            }
+
+            override fun onPageStarted(
+                view: WebView?,
+                url: String?,
+                favicon: android.graphics.Bitmap?,
+            ) {
+                super.onPageStarted(view, url, favicon)
+                view?.evaluateJavascript(HOOK_JS, null)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 view?.evaluateJavascript(HOOK_JS, null)
             }
+        }
+    }
+
+    /** 把 hook 脚本直接插进主文档 HTML，保证早于抖音自己的脚本执行。 */
+    private fun injectHookIntoMainPage(url: String): WebResourceResponse? {
+        return try {
+            val conn = URL(url).openConnection() as HttpURLConnection
+            try {
+                conn.connectTimeout = 20000
+                conn.readTimeout = 20000
+                conn.setRequestProperty("User-Agent", DouyinParser.DESKTOP_UA)
+                conn.setRequestProperty(
+                    "Accept",
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                )
+                conn.setRequestProperty("Accept-Encoding", "identity")
+                CookieManager.getInstance().getCookie(url)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { conn.setRequestProperty("Cookie", it) }
+
+                if (conn.responseCode !in 200..299) {
+                    appendLog("主文档 HTTP ${conn.responseCode}")
+                    return null
+                }
+                val html = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val script = "<script>$HOOK_JS</script>"
+                val headMatch = Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(html)
+                val injected = if (headMatch != null) {
+                    val end = headMatch.range.last + 1
+                    html.substring(0, end) + script + html.substring(end)
+                } else {
+                    script + html
+                }
+                appendLog("主文档已注入 hook (${html.length} 字节)")
+                WebResourceResponse("text/html", "UTF-8", injected.byteInputStream(Charsets.UTF_8))
+            } finally {
+                conn.disconnect()
+            }
+        } catch (e: Exception) {
+            appendLog("注入失败: ${e.message}")
+            null
         }
     }
 
@@ -106,6 +160,12 @@ class MainActivity : AppCompatActivity() {
                 if (conn.getRequestProperty("User-Agent").isNullOrEmpty()) {
                     conn.setRequestProperty("User-Agent", DouyinParser.DESKTOP_UA)
                 }
+                if (conn.getRequestProperty("Referer").isNullOrEmpty()) {
+                    conn.setRequestProperty("Referer", "https://www.douyin.com/")
+                }
+                if (conn.getRequestProperty("Accept").isNullOrEmpty()) {
+                    conn.setRequestProperty("Accept", "application/json, text/plain, */*")
+                }
                 CookieManager.getInstance().getCookie(url)
                     ?.takeIf { it.isNotBlank() }
                     ?.let { conn.setRequestProperty("Cookie", it) }
@@ -113,8 +173,9 @@ class MainActivity : AppCompatActivity() {
                 if (conn.responseCode !in 200..299) return null
                 val body = conn.inputStream.bufferedReader().use { it.readText() }
                 DouyinParser.parseAwemeDetail(body)?.let { item ->
+                    appendLog("详情接口命中")
                     runOnUiThread { onVideoParsed(item) }
-                }
+                } ?: appendLog("详情接口无数据 (${body.length} 字节)")
                 WebResourceResponse("application/json", "UTF-8", body.byteInputStream())
             } finally {
                 conn.disconnect()
@@ -151,6 +212,7 @@ class MainActivity : AppCompatActivity() {
 
         current = null
         parsingId = null
+        logs.clear()
         binding.resultCard.visibility = View.GONE
         setBusy(true)
         setStatus("解析中，请稍候…")
@@ -174,6 +236,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun parseVideo(videoId: String) {
         parsingId = videoId
+        appendLog("解析视频 $videoId")
         setStatus("正在加载作品页…")
         binding.webView.loadUrl("https://www.douyin.com/video/$videoId")
         binding.webView.postDelayed({ fallbackFromPage(videoId) }, 20000)
@@ -191,6 +254,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 parsingId = null
                 setBusy(false)
+                appendLog("页面兜底未取到视频地址")
                 setStatus("视频解析失败：页面没有返回数据，请稍后重试", true)
             }
         }
@@ -379,11 +443,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setStatus(message: String, isError: Boolean = false) {
-        binding.statusText.text = message
+        val text = if (isError && logs.isNotEmpty()) {
+            message + "\n\n--- 调试信息 ---\n" + logs.lines().filter { it.isNotBlank() }.takeLast(6).joinToString("\n")
+        } else {
+            message
+        }
+        binding.statusText.text = text
         binding.statusText.setTextColor(
             if (isError) Color.parseColor("#FF7B8A")
             else ContextCompat.getColor(this, R.color.muted)
         )
+    }
+
+    private fun appendLog(message: String) {
+        runOnUiThread { logs.append(message).append('\n') }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
