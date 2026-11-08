@@ -11,7 +11,7 @@
 
 ## Android App
 
-安装 [`releases/douyin-android-v1.0.apk`](releases/douyin-android-v1.0.apk)，打开后：
+安装 [`releases/douyin-android-v1.1.apk`](releases/douyin-android-v1.1.apk)，打开后：
 
 1. 在抖音点「分享 → 复制链接」
 2. 回到 App 粘贴，点「解析作品」
