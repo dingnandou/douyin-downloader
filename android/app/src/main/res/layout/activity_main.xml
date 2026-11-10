@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg">
+
+<androidx.core.widget.NestedScrollView
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg"
@@ -150,11 +155,17 @@
             android:textColor="#55555F"
             android:textSize="12sp" />
 
-        <WebView
-            android:id="@+id/webView"
-            android:layout_width="1dp"
-            android:layout_height="1dp" />
-
     </LinearLayout>
 
 </androidx.core.widget.NestedScrollView>
+
+    <!-- 隐藏的解析用 WebView：正常尺寸渲染，但整体移出屏幕 -->
+    <WebView
+        android:id="@+id/webView"
+        android:layout_width="360dp"
+        android:layout_height="640dp"
+        android:layout_gravity="top|start"
+        android:translationX="-2000dp"
+        android:translationY="-2000dp" />
+
+</FrameLayout>

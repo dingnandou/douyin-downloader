@@ -33,6 +33,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var current: MediaItem? = null
     private var parsingId: String? = null
+    private var triedMobile = false
+    private var currentUa = DouyinParser.DESKTOP_UA
     private val logs = StringBuilder()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,8 +82,11 @@ class MainActivity : AppCompatActivity() {
                 request: WebResourceRequest?,
             ): WebResourceResponse? {
                 val url = request?.url?.toString() ?: return null
-                if (url.contains("aweme/v1/web/aweme/detail")) return forwardDetail(request)
-                if (request.isForMainFrame && url.startsWith("https://www.douyin.com/video/")) {
+                if (isDetailUrl(url)) return forwardDetail(request)
+                if (request.isForMainFrame &&
+                    (url.startsWith("https://www.douyin.com/video/") ||
+                        url.startsWith("https://www.iesdouyin.com/share/video/"))
+                ) {
                     return injectHookIntoMainPage(url)
                 }
                 return null
@@ -110,7 +115,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 conn.connectTimeout = 20000
                 conn.readTimeout = 20000
-                conn.setRequestProperty("User-Agent", DouyinParser.DESKTOP_UA)
+                conn.setRequestProperty("User-Agent", currentUa)
                 conn.setRequestProperty(
                     "Accept",
                     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
@@ -158,7 +163,7 @@ class MainActivity : AppCompatActivity() {
                     runCatching { conn.setRequestProperty(key, value) }
                 }
                 if (conn.getRequestProperty("User-Agent").isNullOrEmpty()) {
-                    conn.setRequestProperty("User-Agent", DouyinParser.DESKTOP_UA)
+                    conn.setRequestProperty("User-Agent", currentUa)
                 }
                 if (conn.getRequestProperty("Referer").isNullOrEmpty()) {
                     conn.setRequestProperty("Referer", "https://www.douyin.com/")
@@ -236,29 +241,52 @@ class MainActivity : AppCompatActivity() {
 
     private fun parseVideo(videoId: String) {
         parsingId = videoId
-        appendLog("解析视频 $videoId")
+        triedMobile = false
+        currentUa = DouyinParser.DESKTOP_UA
+        appendLog("解析视频 $videoId（桌面页）")
         setStatus("正在加载作品页…")
+        binding.webView.settings.userAgentString = currentUa
         binding.webView.loadUrl("https://www.douyin.com/video/$videoId")
-        binding.webView.postDelayed({ fallbackFromPage(videoId) }, 20000)
+        binding.webView.postDelayed({ checkPageVideo(videoId, mobileNext = true) }, 20000)
     }
 
-    private fun fallbackFromPage(videoId: String) {
+    private fun checkPageVideo(videoId: String, mobileNext: Boolean) {
         if (parsingId != videoId) return
-        binding.webView.evaluateJavascript(
-            "(function(){var v=document.querySelector('video');return v?(v.currentSrc||v.src||''):''})()"
-        ) { raw ->
+        binding.webView.evaluateJavascript(VIDEO_SRC_JS) { raw ->
             if (parsingId != videoId) return@evaluateJavascript
             val src = raw?.trim('"').orEmpty()
             if (src.startsWith("http")) {
                 onVideoParsed(MediaItem("video", "抖音视频", "", "", null, src, emptyList()))
+                return@evaluateJavascript
+            }
+            if (mobileNext && !triedMobile) {
+                triedMobile = true
+                currentUa = DouyinParser.MOBILE_UA
+                appendLog("桌面页无数据，切换移动分享页")
+                setStatus("换一种方式重试…")
+                binding.webView.settings.userAgentString = currentUa
+                binding.webView.loadUrl("https://www.iesdouyin.com/share/video/$videoId/")
+                binding.webView.postDelayed({ checkPageVideo(videoId, mobileNext = false) }, 15000)
             } else {
-                parsingId = null
-                setBusy(false)
-                appendLog("页面兜底未取到视频地址")
-                setStatus("视频解析失败：页面没有返回数据，请稍后重试", true)
+                diagnose(videoId)
             }
         }
     }
+
+    private fun diagnose(videoId: String) {
+        binding.webView.evaluateJavascript(DIAG_JS) { raw ->
+            if (parsingId != videoId) return@evaluateJavascript
+            parsingId = null
+            setBusy(false)
+            appendLog("页面状态: " + (raw ?: "").take(400))
+            setStatus("视频解析失败：页面没有返回数据", true)
+        }
+    }
+
+    private fun isDetailUrl(url: String): Boolean =
+        url.contains("aweme/v1/web/aweme/detail") ||
+            url.contains("/aweme/v1/aweme/detail") ||
+            url.contains("iteminfo")
 
     private fun onVideoParsed(item: MediaItem) {
         parsingId = null
@@ -466,9 +494,12 @@ class MainActivity : AppCompatActivity() {
 (function () {
   if (window.__dyHooked) return;
   window.__dyHooked = true;
+  window.__dyHookVersion = 2;
   function hit(url, text) {
     try {
-      if (url && url.indexOf('aweme/v1/web/aweme/detail') >= 0) {
+      if (url && (url.indexOf('aweme/v1/web/aweme/detail') >= 0 ||
+                  url.indexOf('/aweme/v1/aweme/detail') >= 0 ||
+                  url.indexOf('iteminfo') >= 0)) {
         window.DyBridge.onDetail(text);
       }
     } catch (e) {}
@@ -497,6 +528,24 @@ class MainActivity : AppCompatActivity() {
     return originalSend.apply(this, arguments);
   };
 })();
+"""
+
+        private const val VIDEO_SRC_JS =
+            "(function(){var v=document.querySelector('video');return v?(v.currentSrc||v.src||''):''})()"
+
+        private const val DIAG_JS = """
+(function(){
+  try {
+    var body = document.body ? document.body.innerText : '';
+    return JSON.stringify({
+      title: document.title,
+      href: location.href,
+      hooked: !!window.__dyHookVersion,
+      scripts: document.scripts.length,
+      text: body.replace(/\s+/g, ' ').slice(0, 160)
+    });
+  } catch (e) { return 'ERR ' + e; }
+})()
 """
     }
 }

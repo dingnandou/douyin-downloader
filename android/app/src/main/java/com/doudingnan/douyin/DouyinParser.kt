@@ -19,6 +19,8 @@ object DouyinParser {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
     const val GOOGLEBOT_UA =
         "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+    const val MOBILE_UA =
+        "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
 
     private val URL_RE = Regex("""https?://[^\s　，,。；;）)】]+""", RegexOption.IGNORE_CASE)
     private val ITEM_RE =
